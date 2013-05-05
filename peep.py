@@ -2,10 +2,14 @@
 # coding: utf-8
 
 import collections
+import cProfile
+import functools
 import gc
+import linecache
 import os
 import sys
 import time
+import trace
 import traceback
 
 __version__ = "0.9.0"
@@ -122,3 +126,37 @@ def _is_py_module(module):
 
     filename = getattr(module, "__file__", None)
     return filename and any(filename.endswith(ext) for ext in exts)
+
+
+def profile(fn):
+    @functools.wraps(fn)
+    def profiled_fn(*args, **kwargs):
+        fpath = "/tmp/{0}.profile".format(fn.__name__)
+        prof = cProfile.Profile()
+        ret = prof.runcall(fn, *args, **kwargs)
+        prof.dump_stats(fpath)
+        return ret
+
+    return profiled_fn
+
+
+def trace_lines(frame, event, arg):
+    if event == "line":
+        lineno = frame.f_lineno
+        filename = frame.f_globals["__file__"]
+
+        if filename.endswith(".pyc") or filename.endswith(".pyo"):
+            filename = filename[:-1]
+
+        name = frame.f_globals["__name__"]
+        line = linecache.getline(filename, lineno)
+        print "%s:%s: %s" % (name, lineno, line.rstrip())
+
+
+def traced(fn):
+    @functools.wraps(fn)
+    def traced_fn(*args, **kwargs):
+        sys.settrace(tracefunc)
+        return fn(*args, **kwargs)
+
+    return traced_fn
